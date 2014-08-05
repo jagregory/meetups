@@ -3,56 +3,144 @@
 require 'net/http'
 require 'json'
 require 'time'
+require 'optparse'
+require 'yaml'
 
-YAWNFESTS = [
-  'Sydney SQL Server User Group',
-  'Sydney Salesforce Not-For-Profit User Group',
-  'Tech Startup Poker Sydney',
-  'Silicon Beach',
-  'Sydney Drupal Social Meetup',
-  'Sydney SEO',
-  'Sydney Jobs-To-Be-Done Meetup',
-  'Joomla User Group Sydney',
-  'Sydney Dynamics CRM User Group',
-  'Zend Framework - Sydney User Group',
-]
+Venue = Struct.new(:name, :link)
+Meetup = Struct.new(:event_id, :group, :url, :time, :venue, :notable_attendees)
+
+ICONS = {
+  ours: {
+    emoji: '🏠',
+    image: 'https://mail.google.com/mail/e/4B0'
+  },
+  attending: {
+    emoji: '🌟',
+    image: 'https://mail.google.com/mail/e/B68'
+  }
+}
+
+OPTIONS = {
+  blacklist: 'blacklist.txt',
+  category: 34,
+  city: 'sydney',
+  highlight: 'users.yml',
+  fast: false
+}
+
+OptionParser.new do |opts|
+  opts.banner = "Usage: upcoming [options]"
+
+  opts.on('--all', "Don't use a blacklist") { |v| OPTIONS[:all] = v }
+  opts.on('--raw', "Raw output, no markdown") { |v| OPTIONS[:raw] = v }
+  opts.on('-c', '--city CITY', 'Meetup city (default: Sydney)') { |v| OPTIONS[:city] = v }
+  opts.on('-b', '--blacklist FILE', 'Meetup blacklist file (default: blacklist.txt)') { |v| OPTIONS[:blacklist] = v }
+  opts.on('--highlight FILE', 'Attendees to highlight (default: users.yml)') { |v| OPTIONS[:highlight] = v }
+  opts.on('-f', '--fast', "Don't highlight notable attendees") { |v| OPTIONS[:fast] = v }
+  opts.on('--category N', Integer, 'Meetup.com category ID (default: 34)') { |v| OPTIONS[:category] = v }
+  opts.on('-v', '--verbose', 'Log debug info') { |v| OPTIONS[:verbose] = v }
+  opts.on('--emoji', 'Use emoji for icons') { |v| OPTIONS[:emoji] = v }
+end.parse!
+
+def icon(name)
+  return ICONS[name][:emoji] if OPTIONS[:emoji]
+  "![](#{ICONS[name][:image]})"
+end
+
+# get a meetup API collection, walking through the pages as necessary
+def get_paged(url, &block)
+  puts "verbose: GET #{url}" if OPTIONS[:verbose]
+  response = JSON.parse Net::HTTP.get URI.parse url
+  
+  block.call(response)
+
+  get_paged(response['meta']['next'], &block) unless response['meta']['next'].empty?
+end
 
 # convert a Meetup.com result into a hash of the bits we use
 def to_meetup(result)
-  {
-    group_name: result['group']['name'],
-    url: result['event_url'],
-    time: Time.at(result['time'] / 1000).localtime,
-    venue: ({
-      name: result['venue']['name'],
-      link: "https://maps.google.com/?q=#{URI.encode result['venue']['address_1'] + ' Sydney, Australia'}"
-    } if result['venue'])
-  }
+  venue = if result['venue']
+    slug = result['venue']['address_1'] + ', ' + result['venue']['city'] + ', Australia'
+    Venue.new(result['venue']['name'], "https://maps.google.com/?q=#{URI.encode slug}")
+  end
+
+  Meetup.new(result['id'], result['group']['name'], result['event_url'], Time.at(result['time'] / 1000).localtime, venue, 0)
+end
+
+def get_meetups
+  url = "https://api.meetup.com/2/open_events?&sign=true&photo-host=public&city=#{OPTIONS[:city]}&country=au&category=#{OPTIONS[:category]}&page=50&time=#{TIME}&key=#{API_KEY}&limited_events=true"
+  meetups = []
+
+  get_paged(url) do |res|
+    meetups += res['results'].map(&method(:to_meetup))
+  end
+
+  meetups
+end
+
+def get_rsvp_yesses(event_ids)
+  url = "https://api.meetup.com/2/rsvps?&sign=true&photo-host=public&event_id=#{event_ids.join(',')}&page=200&key=#{API_KEY}"
+  rsvps = []
+
+  get_paged url do |res|
+    rsvps += res['results'].map { |r| [r['event']['id'], r['member']['member_id']] }
+  end
+
+  Hash[rsvps.group_by {|e,_| e }.map {|e,rs| [e, rs.map {|r| r[1] }]}]
+end
+
+def update_notable_attendees(meetups, users)
+  all_rsvps = get_rsvp_yesses meetups.map(&:event_id)
+
+  meetups.each do |m|
+    rsvps = all_rsvps[m.event_id] || []
+    m.notable_attendees = (rsvps & users).count
+    puts "verbose: #{m.event_id} has #{rsvps.count} attendees (#{m.notable_attendees} notable)" if OPTIONS[:verbose]
+  end
 end
 
 # print a single meetup (as a bullet point in markdown)
 def print_meetup(meetup)
-  time = meetup[:time].strftime('%l.%M%P').strip
-  print "  * [#{meetup[:group_name]}](#{meetup[:url]}) #{time}"
-  print " @ [#{meetup[:venue][:name]}](#{meetup[:venue][:link]})" if meetup[:venue]
+  time = meetup.time.strftime('%l.%M%P').strip
+  print "  * "
+  print "#{icon :attending}  " if meetup.notable_attendees > 0
+  print "#{icon :ours}  " if meetup.venue && meetup.venue.name =~ /thoughtworks/i
+  print "#{time} [#{meetup.group}](#{meetup.url})"
   puts
+  puts "    (TWers: #{meetup.notable_attendees})" if meetup.notable_attendees > 0
 end
 
 API_KEY = ENV['API_KEY']
-TECH_CATEGORY = 34
 TIME = ',1w'
 
-response = JSON.parse Net::HTTP.get URI.parse "https://api.meetup.com/2/open_events?&sign=true&photo-host=public&city=sydney&country=au&category=#{TECH_CATEGORY}&page=50&time=#{TIME}&key=#{API_KEY}&limited_events=true"
-meetups = response['results'].map(&method(:to_meetup))
-meetups.reject! { |m| YAWNFESTS.include? m[:group_name]}
+unless OPTIONS[:all] || File.exist?(OPTIONS[:blacklist])
+  puts "Error: Blacklist file not found (#{OPTIONS[:blacklist]})"
+  exit(1) 
+end
 
-# group the meetups by day and print them out
-meetups_by_day = meetups.group_by { |m| m[:time].strftime('%Y-%m-%d') }
-meetups_by_day.each do |date,meetups|
-  puts "## #{Time.parse(date).strftime('%A')}"
+blacklist = File.readlines(OPTIONS[:blacklist]).map(&:chomp) unless OPTIONS[:all]
+users = OPTIONS[:highlight] && !OPTIONS[:fast] ? YAML.load_file(OPTIONS[:highlight]) : []
+
+meetups = get_meetups()
+meetups.reject! { |m| blacklist.include? m.group } unless OPTIONS[:all]
+
+update_notable_attendees(meetups, users) if users.any?
+
+if OPTIONS[:raw]
+  meetups.each do |m|
+    puts "#{m.time}\t#{m.event_id}\t#{m.group}\t#{m.notable_attendees}\t#{m.url}"
+  end
+else
+  puts "#{icon :ours}  - Hosted at ThoughtWorks, #{icon :attending}  - ThoughtWorkers in attendance"
   puts
+  # group the meetups by day and print them out
+  meetups_by_day = meetups.group_by { |m| m.time.strftime('%Y-%m-%d') }
+  meetups_by_day.each do |date,meetups|
+    puts "## #{Time.parse(date).strftime('%A')}"
+    puts
 
-  meetups.each(&method(:print_meetup))
+    meetups.each(&method(:print_meetup))
 
-  puts
+    puts
+  end
 end
