@@ -1,0 +1,39 @@
+#!/usr/bin/env ruby
+
+require 'json'
+require 'net/http'
+require 'optparse'
+require 'time'
+
+API_KEY = ENV['API_KEY']
+OPTIONS = {}
+
+OptionParser.new do |opts|
+  opts.banner = "Usage: calendar [options]"
+end.parse!
+
+def load_calendar_json
+  uri = URI.parse 'https://www.googleapis.com/calendar/v3/calendars/thoughtworks.com_9igcc8n1ub0ksqb2smmcdjsdns%40group.calendar.google.com/events?singleEvents=true'
+  req = Net::HTTP::Get.new(uri)
+  req['Authorization'] = "Bearer #{API_KEY}"
+  res = Net::HTTP.start(uri.hostname, uri.port, use_ssl: true) {|http| http.request(req) }
+  JSON.parse res.body
+end
+
+def parse_event(event)
+  {
+    name: event['summary'],
+    time: (Time.parse(event['start']['dateTime']) if event['start']['dateTime'])
+  }
+end
+
+today = Date.today.to_time
+next_week = (Date.today + 7).to_time
+
+events = load_calendar_json['items']
+  .map(&method(:parse_event))
+  .select {|item| item[:time] && item[:time] >= today && item[:time] <= next_week } 
+
+events.each do |event|
+  puts "#{event[:time]}\t#{event[:name]}"
+end
