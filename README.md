@@ -8,6 +8,8 @@ Prints it as markdown.
 
 ## Usage
 
+Get yourself a blacklist.txt and users.yml from somewhere (James) first.
+
     API_KEY=YOUR_MEETUP_KEY ./upcoming --help
 
     Usage: upcoming [options]
