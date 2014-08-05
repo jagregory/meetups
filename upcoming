@@ -1,0 +1,58 @@
+#!/usr/bin/env ruby
+
+require 'net/http'
+require 'json'
+require 'time'
+
+YAWNFESTS = [
+  'Sydney SQL Server User Group',
+  'Sydney Salesforce Not-For-Profit User Group',
+  'Tech Startup Poker Sydney',
+  'Silicon Beach',
+  'Sydney Drupal Social Meetup',
+  'Sydney SEO',
+  'Sydney Jobs-To-Be-Done Meetup',
+  'Joomla User Group Sydney',
+  'Sydney Dynamics CRM User Group',
+  'Zend Framework - Sydney User Group',
+]
+
+# convert a Meetup.com result into a hash of the bits we use
+def to_meetup(result)
+  {
+    group_name: result['group']['name'],
+    url: result['event_url'],
+    time: Time.at(result['time'] / 1000).localtime,
+    venue: ({
+      name: result['venue']['name'],
+      link: "https://maps.google.com/?q=#{URI.encode result['venue']['address_1'] + ' Sydney, Australia'}"
+    } if result['venue'])
+  }
+end
+
+# print a single meetup (as a bullet point in markdown)
+def print_meetup(meetup)
+  time = meetup[:time].strftime('%l.%M%P').strip
+  print "  * [#{meetup[:group_name]}](#{meetup[:url]}) #{time}"
+  print " @ [#{meetup[:venue][:name]}](#{meetup[:venue][:link]})" if meetup[:venue]
+  puts
+end
+
+API_KEY = ENV['API_KEY']
+TECH_CATEGORY = 34
+TIME = ',1w'
+
+response = JSON.parse Net::HTTP.get URI.parse "https://api.meetup.com/2/open_events?&sign=true&photo-host=public&city=sydney&country=au&category=#{TECH_CATEGORY}&page=50&time=#{TIME}&key=#{API_KEY}&limited_events=true"
+meetups = response['results'].map(&method(:to_meetup))
+meetups.reject! { |m| YAWNFESTS.include? m[:group_name]}
+
+# group the meetups by day and print them out
+meetups_by_day = meetups.group_by { |m| m[:time].strftime('%Y-%m-%d') }
+meetups_by_day.each do |date,meetups|
+  puts "## #{Time.parse(date).strftime('%A')}"
+  puts
+
+  meetups.each(&method(:print_meetup))
+
+  puts
+end
