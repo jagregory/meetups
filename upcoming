@@ -128,7 +128,7 @@ update_notable_attendees(meetups, users) if users.any?
 
 if OPTIONS[:raw]
   meetups.each do |m|
-    puts "#{m.time}\t#{m.event_id}\t#{m.group}\t#{m.notable_attendees}\t#{m.url}"
+    puts "#{m.time}\t#{m.group}\t#{m.notable_attendees}\t#{m.url}"
   end
 else
   puts "#{icon :ours}  - Hosted at ThoughtWorks, #{icon :attending}  - ThoughtWorkers in attendance"
