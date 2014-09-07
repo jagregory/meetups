@@ -7,7 +7,7 @@ require 'optparse'
 require 'yaml'
 
 Venue = Struct.new(:name, :link)
-Meetup = Struct.new(:event_id, :group, :url, :time, :venue, :notable_attendees)
+Meetup = Struct.new(:event_id, :group, :name, :url, :time, :venue, :notable_attendees)
 
 ICONS = {
   ours: {
@@ -64,7 +64,7 @@ def to_meetup(result)
     Venue.new(result['venue']['name'], "https://maps.google.com/?q=#{URI.encode slug}")
   end
 
-  Meetup.new(result['id'], result['group']['name'], result['event_url'], Time.at(result['time'] / 1000).localtime, venue, 0)
+  Meetup.new(result['id'], result['group']['name'], result['name'], result['event_url'], Time.at(result['time'] / 1000).localtime, venue, 0)
 end
 
 def get_meetups
@@ -99,13 +99,18 @@ def update_notable_attendees(meetups, users)
   end
 end
 
+# try to strip the city name from the start or end of a meetup/group name
+def clean_name(name)
+  name.gsub(/(?:the\s+)?+#{OPTIONS[:city]}\s?+/i, '').strip
+end
+
 # print a single meetup (as a bullet point in markdown)
 def print_meetup(meetup)
   time = meetup.time.strftime('%l.%M%P').strip
   print "  * "
   print "#{icon :attending}  " if meetup.notable_attendees > 0
   print "#{icon :ours}  " if meetup.venue && meetup.venue.name =~ /thoughtworks/i
-  print "#{time} [#{meetup.group}](#{meetup.url})"
+  print "#{time} [#{meetup.name} (#{clean_name meetup.group})](#{meetup.url})"
   puts
   puts "    (TWers: #{meetup.notable_attendees})" if meetup.notable_attendees > 0
 end
