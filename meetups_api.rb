@@ -6,6 +6,7 @@ require 'yaml'
 
 Venue = Struct.new(:name, :link)
 Meetup = Struct.new(:event_id, :group, :name, :url, :time, :venue, :notable_attendees)
+Attendee = Struct.new(:id, :name)
 
 class MeetupsApi
   TIME = ',1w'
@@ -62,13 +63,13 @@ class MeetupsApi
     Meetup.new(result['id'], result['group']['name'], result['name'], result['event_url'], Time.at(result['time'] / 1000).localtime, venue, 0)
   end
 
-  # update the meetup with the number of "notable" attendees, aka ThoughtWorkers
+  # update the meetup with the "notable" attendees, aka ThoughtWorkers
   def update_notable_attendees(events, users)
     all_rsvps = get_rsvp_yesses events.map(&:event_id)
 
     events.each do |m|
       rsvps = all_rsvps[m.event_id] || []
-      m.notable_attendees = (rsvps & users).count
+      m.notable_attendees = rsvps.select { |r| users.include? r.id }
       puts "verbose: #{m.event_id} has #{rsvps.count} attendees (#{m.notable_attendees} notable)" if @verbose
     end
   end
@@ -79,9 +80,9 @@ class MeetupsApi
     rsvps = []
 
     get_paged url do |res|
-      rsvps += res['results'].map { |r| [r['event']['id'], r['member']['member_id']] }
+      rsvps += res['results'].map { |r| [r['event']['id'], Attendee.new(r['member']['member_id'], r['member']['name'])] }
     end
 
-    Hash[rsvps.group_by {|e,_| e }.map {|e,rs| [e, rs.map {|r| r[1] }]}]
+    Hash[rsvps.group_by {|e,_| e }.map {|e,rs| [e, rs.map {|f| f[1]}]}]
   end
 end

@@ -47,11 +47,15 @@
     float: left;
   }
 
-  .group {
+  div {
     color: #666;
     display: block;
     font-size: 80%;
     font-weight: 300;
+  }
+
+  .attendees {
+    font-weight: bold;
   }
 </style>
 
@@ -72,17 +76,24 @@
             <% meetups.each do |meetup| %>
               <li>
                 <a href="<%= meetup.url %>"><%= meetup.name %></a>
-                <% if meetup.notable_attendees > 0 %>
+                <% if meetup.notable_attendees.count > 0 %>
                   <img src="https://mail.google.com/mail/e/B68">
                 <% end %>
                 <% if meetup.venue && meetup.venue.name =~ /thoughtworks/i %>
                   <img src="https://mail.google.com/mail/e/4B0">
                 <% end %>
-                <span class="group"><%= clean_name meetup.group %></span>
-
-                <% if meetup.notable_attendees > 0 %>
-                  (TWers: <%= meetup.notable_attendees %>)
-                <% end %>
+                <div>
+                  <span class="group"><%= clean_name meetup.group %></span>
+                  <% if meetup.notable_attendees.count > 0 %>
+                    | <span class="attendees">Fancy joining <%= meetup.notable_attendees[0].name %>
+                    <% if meetup.notable_attendees.count > 1 %>
+                      and <%= meetup.notable_attendees[1].name %>
+                      <% if meetup.notable_attendees.count > 2 %>
+                        (and <%= meetup.notable_attendees.count - 2 %> others)
+                      <% end %>
+                    <% end %>?</span>
+                  <% end %>
+                </div>
               </li>
             <% end %>
           </ul>
