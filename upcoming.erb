@@ -10,8 +10,17 @@
     font-family: 'Open Sans';
   }
 
+  section {
+    margin-bottom: 50px;
+  }
+
   ul {
     list-style: none;
+    padding: 0;
+  }
+
+  ul ul {
+    padding-left: 70px;
   }
 
   li {
@@ -20,14 +29,22 @@
     padding-bottom: 10px;
   }
 
-  li:last-child {
+  li:last-child, li li {
     border-bottom: 0;
     padding-bottom: 0;
+  }
+
+  li li:last-child {
+    margin-bottom: 0;
   }
 
   a {
     color: blue;
     text-decoration: none;
+  }
+
+  .time {
+    float: left;
   }
 
   .group {
@@ -43,26 +60,32 @@
   <img src="https://mail.google.com/mail/e/B68"> - ThoughtWorkers in attendance
 </p>
 
-<% meetups.group_by { |m| m.time.strftime('%Y-%m-%d') }.each do |date,meetups| %>
+<% meetups.group_by { |m| m.time.strftime('%Y-%m-%d') }.each do |date,day_meetups| %>
   <section>
     <h2><%= Time.parse(date).strftime('%A') %></h2>
     
     <ul>
-      <% meetups.each do |meetup| %>
+      <% day_meetups.group_by { |m| m.time.strftime('%l.%M%P').strip }.each do |time,meetups| %>
         <li>
-          <span class="time"><%= meetup.time.strftime('%l.%M%P').strip %></span>
-          <a href="<%= meetup.url %>"><%= meetup.name %></a>
-          <% if meetup.notable_attendees > 0 %>
-            <img src="https://mail.google.com/mail/e/B68">
-          <% end %>
-          <% if meetup.venue && meetup.venue.name =~ /thoughtworks/i %>
-            <img src="https://mail.google.com/mail/e/4B0">
-          <% end %>
-          <span class="group"><%= clean_name meetup.group %></span>
+          <span class="time"><%= time %></span>
+          <ul>
+            <% meetups.each do |meetup| %>
+              <li>
+                <a href="<%= meetup.url %>"><%= meetup.name %></a>
+                <% if meetup.notable_attendees > 0 %>
+                  <img src="https://mail.google.com/mail/e/B68">
+                <% end %>
+                <% if meetup.venue && meetup.venue.name =~ /thoughtworks/i %>
+                  <img src="https://mail.google.com/mail/e/4B0">
+                <% end %>
+                <span class="group"><%= clean_name meetup.group %></span>
 
-          <% if meetup.notable_attendees > 0 %>
-            (TWers: <%= meetup.notable_attendees %>)
-          <% end %>
+                <% if meetup.notable_attendees > 0 %>
+                  (TWers: <%= meetup.notable_attendees %>)
+                <% end %>
+              </li>
+            <% end %>
+          </ul>
         </li>
       <% end %>
     </ul>
