@@ -3,6 +3,7 @@
 require './meetups_api'
 require 'time'
 require 'optparse'
+require 'erb'
 
 ICONS = {
   ours: {
@@ -42,22 +43,6 @@ def icon(name)
   "![](#{ICONS[name][:image]})"
 end
 
-# try to strip the city name from the start or end of a meetup/group name
-def clean_name(name)
-  name.gsub(/(?:the\s+)?+#{OPTIONS[:city]}\s?+/i, '').strip
-end
-
-# print a single meetup (as a bullet point in markdown)
-def print_meetup(meetup)
-  time = meetup.time.strftime('%l.%M%P').strip
-  print "  * "
-  print "#{icon :attending}  " if meetup.notable_attendees > 0
-  print "#{icon :ours}  " if meetup.venue && meetup.venue.name =~ /thoughtworks/i
-  print "#{time} [#{meetup.name} (#{clean_name meetup.group})](#{meetup.url})"
-  puts
-  puts "    (TWers: #{meetup.notable_attendees})" if meetup.notable_attendees > 0
-end
-
 unless OPTIONS[:all] || File.exist?(OPTIONS[:blacklist])
   puts "Error: Blacklist file not found (#{OPTIONS[:blacklist]})"
   exit(1) 
@@ -71,16 +56,6 @@ if OPTIONS[:raw]
     puts "#{m.time}\t#{m.group}\t#{m.notable_attendees}\t#{m.url}"
   end
 else
-  puts "#{icon :ours}  - Hosted at ThoughtWorks, #{icon :attending}  - ThoughtWorkers in attendance"
-  puts
-  # group the meetups by day and print them out
-  meetups_by_day = meetups.group_by { |m| m.time.strftime('%Y-%m-%d') }
-  meetups_by_day.each do |date,meetups|
-    puts "## #{Time.parse(date).strftime('%A')}"
-    puts
-
-    meetups.each(&method(:print_meetup))
-
-    puts
-  end
+  renderer = ERB.new(File.read 'upcoming.erb')
+  puts output = renderer.result()
 end

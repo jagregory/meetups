@@ -1,0 +1,34 @@
+<%
+  # try to strip the city name from the start or end of a meetup/group name
+  def clean_name(name)
+    name.gsub(/(?:the\s+)?+#{OPTIONS[:city]}\s?+/i, '').strip
+  end
+%>
+
+<p>
+  <img src="https://mail.google.com/mail/e/4B0"> - Hosted at ThoughtWorks,
+  <img src="https://mail.google.com/mail/e/B68"> - ThoughtWorkers in attendance
+</p>
+
+<% meetups.group_by { |m| m.time.strftime('%Y-%m-%d') }.each do |date,meetups| %>
+  <h2><%= Time.parse(date).strftime('%A') %></h2>
+  
+  <ul>
+    <% meetups.each do |meetup| %>
+      <li>
+        <% if meetup.notable_attendees > 0 %>
+          <img src="https://mail.google.com/mail/e/B68">
+        <% end %>
+        <% if meetup.venue && meetup.venue.name =~ /thoughtworks/i %>
+          <img src="https://mail.google.com/mail/e/4B0">
+        <% end %>
+
+        <%= meetup.time.strftime('%l.%M%P').strip %>
+        <a href="<%= meetup.url %>"><%= meetup.name %> (<%= clean_name meetup.group %>)</a>
+
+        <% if meetup.notable_attendees > 0 %>
+          (TWers: <%= meetup.notable_attendees %>)
+        <% end %>
+    <% end %>
+  </ul>
+<% end %>
