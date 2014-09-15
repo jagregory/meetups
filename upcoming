@@ -1,13 +1,8 @@
 #!/usr/bin/env ruby
 
-require 'net/http'
-require 'json'
+require './meetups_api'
 require 'time'
 require 'optparse'
-require 'yaml'
-
-Venue = Struct.new(:name, :link)
-Meetup = Struct.new(:event_id, :group, :name, :url, :time, :venue, :notable_attendees)
 
 ICONS = {
   ours: {
@@ -47,58 +42,6 @@ def icon(name)
   "![](#{ICONS[name][:image]})"
 end
 
-# get a meetup API collection, walking through the pages as necessary
-def get_paged(url, &block)
-  puts "verbose: GET #{url}" if OPTIONS[:verbose]
-  response = JSON.parse Net::HTTP.get URI.parse url
-  
-  block.call(response)
-
-  get_paged(response['meta']['next'], &block) unless response['meta']['next'].empty?
-end
-
-# convert a Meetup.com result into a hash of the bits we use
-def to_meetup(result)
-  venue = if result['venue']
-    slug = result['venue']['address_1'] + ', ' + result['venue']['city'] + ', Australia'
-    Venue.new(result['venue']['name'], "https://maps.google.com/?q=#{URI.encode slug}")
-  end
-
-  Meetup.new(result['id'], result['group']['name'], result['name'], result['event_url'], Time.at(result['time'] / 1000).localtime, venue, 0)
-end
-
-def get_meetups
-  url = "https://api.meetup.com/2/open_events?&sign=true&photo-host=public&city=#{OPTIONS[:city]}&country=au&category=#{OPTIONS[:category]}&page=50&time=#{TIME}&key=#{API_KEY}&limited_events=true"
-  meetups = []
-
-  get_paged(url) do |res|
-    meetups += res['results'].map(&method(:to_meetup))
-  end
-
-  meetups
-end
-
-def get_rsvp_yesses(event_ids)
-  url = "https://api.meetup.com/2/rsvps?&sign=true&photo-host=public&event_id=#{event_ids.join(',')}&page=200&key=#{API_KEY}"
-  rsvps = []
-
-  get_paged url do |res|
-    rsvps += res['results'].map { |r| [r['event']['id'], r['member']['member_id']] }
-  end
-
-  Hash[rsvps.group_by {|e,_| e }.map {|e,rs| [e, rs.map {|r| r[1] }]}]
-end
-
-def update_notable_attendees(meetups, users)
-  all_rsvps = get_rsvp_yesses meetups.map(&:event_id)
-
-  meetups.each do |m|
-    rsvps = all_rsvps[m.event_id] || []
-    m.notable_attendees = (rsvps & users).count
-    puts "verbose: #{m.event_id} has #{rsvps.count} attendees (#{m.notable_attendees} notable)" if OPTIONS[:verbose]
-  end
-end
-
 # try to strip the city name from the start or end of a meetup/group name
 def clean_name(name)
   name.gsub(/(?:the\s+)?+#{OPTIONS[:city]}\s?+/i, '').strip
@@ -115,21 +58,13 @@ def print_meetup(meetup)
   puts "    (TWers: #{meetup.notable_attendees})" if meetup.notable_attendees > 0
 end
 
-API_KEY = ENV['API_KEY']
-TIME = ',1w'
-
 unless OPTIONS[:all] || File.exist?(OPTIONS[:blacklist])
   puts "Error: Blacklist file not found (#{OPTIONS[:blacklist]})"
   exit(1) 
 end
 
-blacklist = File.readlines(OPTIONS[:blacklist]).map(&:chomp) unless OPTIONS[:all]
-users = OPTIONS[:highlight] && !OPTIONS[:fast] ? YAML.load_file(OPTIONS[:highlight]) : []
-
-meetups = get_meetups()
-meetups.reject! { |m| blacklist.include? m.group } unless OPTIONS[:all]
-
-update_notable_attendees(meetups, users) if users.any?
+meetups_api = MeetupsApi.new(ENV['API_KEY'], OPTIONS)
+meetups = meetups_api.meetups()
 
 if OPTIONS[:raw]
   meetups.each do |m|
