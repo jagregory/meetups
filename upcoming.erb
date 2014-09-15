@@ -5,30 +5,66 @@
   end
 %>
 
+<style>
+  body {
+    font-family: 'Open Sans';
+  }
+
+  ul {
+    list-style: none;
+  }
+
+  li {
+    border-bottom: 1px solid #eee;
+    margin-bottom: 10px;
+    padding-bottom: 10px;
+  }
+
+  li:last-child {
+    border-bottom: 0;
+    padding-bottom: 0;
+  }
+
+  a {
+    color: blue;
+    text-decoration: none;
+  }
+
+  .group {
+    color: #666;
+    display: block;
+    font-size: 80%;
+    font-weight: 300;
+  }
+</style>
+
 <p>
   <img src="https://mail.google.com/mail/e/4B0"> - Hosted at ThoughtWorks,
   <img src="https://mail.google.com/mail/e/B68"> - ThoughtWorkers in attendance
 </p>
 
 <% meetups.group_by { |m| m.time.strftime('%Y-%m-%d') }.each do |date,meetups| %>
-  <h2><%= Time.parse(date).strftime('%A') %></h2>
-  
-  <ul>
-    <% meetups.each do |meetup| %>
-      <li>
-        <% if meetup.notable_attendees > 0 %>
-          <img src="https://mail.google.com/mail/e/B68">
-        <% end %>
-        <% if meetup.venue && meetup.venue.name =~ /thoughtworks/i %>
-          <img src="https://mail.google.com/mail/e/4B0">
-        <% end %>
+  <section>
+    <h2><%= Time.parse(date).strftime('%A') %></h2>
+    
+    <ul>
+      <% meetups.each do |meetup| %>
+        <li>
+          <span class="time"><%= meetup.time.strftime('%l.%M%P').strip %></span>
+          <a href="<%= meetup.url %>"><%= meetup.name %></a>
+          <% if meetup.notable_attendees > 0 %>
+            <img src="https://mail.google.com/mail/e/B68">
+          <% end %>
+          <% if meetup.venue && meetup.venue.name =~ /thoughtworks/i %>
+            <img src="https://mail.google.com/mail/e/4B0">
+          <% end %>
+          <span class="group"><%= clean_name meetup.group %></span>
 
-        <%= meetup.time.strftime('%l.%M%P').strip %>
-        <a href="<%= meetup.url %>"><%= meetup.name %> (<%= clean_name meetup.group %>)</a>
-
-        <% if meetup.notable_attendees > 0 %>
-          (TWers: <%= meetup.notable_attendees %>)
-        <% end %>
-    <% end %>
-  </ul>
+          <% if meetup.notable_attendees > 0 %>
+            (TWers: <%= meetup.notable_attendees %>)
+          <% end %>
+        </li>
+      <% end %>
+    </ul>
+  </section>
 <% end %>
